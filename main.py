@@ -27,7 +27,7 @@ def in_tensor(input_list, all_list):
     count = len(g)
     if count < max_l:
       while len(g) < max_l:
-            g.append('0')
+            g.append(0)
   return ts_list 
 
 input_text = input("E: ").split(" ")
@@ -39,7 +39,7 @@ def encode(input_list, all_list):
   for i in input_list:
     h = ""
     for k in i:
-      if k == '0':
+      if k == 0:
         continue
       enc = all_list[k]
       h = h+enc
