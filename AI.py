@@ -124,8 +124,10 @@ def backwinp(input_list, all_symbs):
 class RecurrentNet(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(RecurrentNet, self).__init__()
-        self.input_size = input_size
-#        self.fc = nn.Linear(400, 900, dtype = torch.float64)
+        self.lstm = nn.LSTM(input_size = 20, hidden_size = 2000, num_layers = 30, batch_first=True)
+        self.Softmax = nn.Softmax()
+        self.dropout = nn.Dropout(0.3)
+        self.fc = nn.Linear(2000, 25, dtype = torch.int32)
 #        nn.Softmax()
 #        self.fc2 = nn.Linear(20, 4980, dtype = torch.float64)
 #        nn.Softmax()
@@ -164,10 +166,11 @@ class RecurrentNet(nn.Module):
 #        self.fc19 = nn.Linear(5000, 5500)
 #        nn.Softmax()
 #        self.fc20 = nn.AdaptiveAvgPool1d(20)
-#    def forward(self, x):
-#        #out = x
-#        out, _ = self.rnn(x)
-#        out = self.fc(out)
+    def forward(self, x):
+#        out = x
+        out, (ht1, ct1)  = self.lstm(x, 2000)
+        out = self.dropout(out)
+        out = self.fc(out)
 #        out, _ = self.rnn2(out)
 #        out = self.fc2(out)
 #        out = self.fc3(out)
@@ -190,39 +193,39 @@ class RecurrentNet(nn.Module):
 #        out = self.fc18(out)
 #        out = self.fc19(out)
 #        out = self.fc20(out)
-#        return out
+        return out
+
+    def init_hidden(self, batch_size=1):
+        return (torch.zeros(30, batch_size, 2000, requires_grad=True).to(device),
+               torch.zeros(30, batch_size, 2000, requires_grad=True).to(device))
 
 
-def train(net, criterion, optimizer, device, scheduler1, scheduler2, quest, answ, all_symbs):
-     net.train()
-     train_loss = 0
-     correct = 0
-     total = 0
-     epochs = 100000
+def train(net, criterion, optimizer, device, scheduler1, quest, answ, all_symbs):
+     loss_avg = []
+     epochs = 50000
      for epoch in range(epochs):
+         net.train()
          inputs, targets = rand_choice(answ, quest)
          inputs = in_tensor(inputs, all_symbs)
          targets = in_tensor(targets, all_symbs)
-         inputs = torch.tensor(inputs, dtype = torch.float64)
-         targets = torch.tensor(targets, dtype = torch.float64)
+         inputs = torch.tensor(inputs, dtype = torch.int32)
+         targets = torch.tensor(targets, dtype = torch.int32)
          inputs, targets = inputs.to(device), targets.to(device)
-         optimizer.zero_grad()
-         output = net(inputs, 4096)
-         #print(output)
+         hidden = net.init_hidden(16)
+         output = net(quest)
          loss = criterion(output, targets)
          loss.backward()
          optimizer.step()
-         predicted = torch.max(output.data, 1).values
-         print(predicted)
-         total += targets.size(0)
-         correct += predicted.eq(targets).sum().item()
-         print(correct)
-         print(epoch)
-       #scheduler1.step()
-       #scheduler2.step()
-     acc = 100. * correct / total
-     print(acc)
-
+         optimizer.zero_grad(l
+         loss_avg.append(loss.item())
+         if len(loss_avg) >= 50:
+          mean_loss = np.mean(loss_avg)
+          print(f'Loss: {mean_loss}')
+          scheduler1.step(mean_loss)
+          loss_avg = []
+          net.eval()
+          predicted_text = output
+          print(predicted_text)
 
 
 
@@ -265,9 +268,9 @@ net.cuda()
 
 
 try:
-  train(net, criterion, optimizer, device, scheduler1, scheduler2, quest, answ, all_symbs)
+  train(net, criterion, optimizer, device, scheduler1, quest, answ, all_symbs)
   torch.save(net.state_dict(), 'model_weights.pth')
 except KeyboardInterrupt:
   torch.save(net.state_dict(), 'model_weights.pth')
-  KeyboardInterrupt
+  KeyboardInterrupt()
 #print(encode(kl, all_symbs_enc))
