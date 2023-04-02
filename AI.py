@@ -74,70 +74,25 @@ class RecurrentNet(nn.Module):
         super(RecurrentNet, self).__init__()
         self.input_size = input_size
         
-        self.fc = nn.LSTM(input_size, 300, 10)
+        self.fc = nn.LSTM(input_size, 70, 5)
 #         self.fc.flatten_parameters()
-#         self.fc = nn.DataParallel(self.fc) 
-        nn.Softmax()
-
-        self.fc1 = nn.Linear(300, input_size)
-#         self.next_hid = nn.Linear(300, 300)
-#        nn.Softmax()
-        
-#         self.fc1 = nn.DataParallel(self.fc1)
-#         self.next_hid = nn.DataParallel(self.next_hid)
-        #self.fc1 = nn.Linear(140, 120)
-#         nn.Softmax()
-#         self.fc2 = nn.Linear(120, 100)
-#         nn.Softmax()
-#         self.fc3 = nn.Linear(100, 80)
-#         nn.Softmax()
-#         self.fc4 = nn.Linear(80, 60)
-#         nn.Softmax()
-#         self.fc5 = nn.Linear(60, 40)
-#         nn.Softmax()
-#         self.fc7 = nn.Linear(40, 20)
-#         nn.Softmax()
-#         self.fc8 = nn.Linear(20, 60)
-#         nn.Softmax()
-#         self.fc9 = nn.Linear(60, 80)
-#         nn.Softmax()
-#         self.fc10 = nn.Linear(80, 110)
-#         nn.Softmax()
-#         self.fc11 = nn.Linear(110, 120)
-#         nn.Softmax()
-#         self.fc12 = nn.Linear(120, 130)
-#         nn.Softmax()
-#         self.fc13 = nn.Linear(130, 140)
-#         nn.Softmax()
-#         self.fc14 = nn.Linear(140, input_size)
-
-
-#     def init_hidden(self):
-#         return (torch.zeros(16, 19, 300, requires_grad=True).to(device),
-#                torch.zeros(16, 19, 300, requires_grad=True).to(device))
+#         self.fc = nn.DataParallel(self.fc)
+#         nn.Softmax
+        self.fc1 = nn.Linear(70, input_size)
+#         nn.Softmax
+        #self.hid_fc = nn.Linear(300, 300)
+        #self.fc1 = nn.DataParallel(self.fc) 
 
 
     def forward(self, x):
-        #x, (ht1, ct1) = self.fc(x, hid)
         x, _ = self.fc(x)
         x = self.fc1(x)
-#         next_hid_ht = self.next_hid(ht1)
-#         next_hid_ct = self.next_hid(ct1)
-#         x = self.fc2(x)
-#         x = self.fc3(x)
-#         x = self.fc4(x)
-#         x = self.fc5(x)
-#         x = self.fc7(x)
-#         x = self.fc8(x)
-#         x = self.fc9(x)
-#         x = self.fc10(x)
-#         x = self.fc11(x)
-#         x = self.fc12(x)
-#         x = self.fc13(x)
-#         x = self.fc14(x)
-        return x#, (next_hid_ht, next_hid_ct)
+#         ht1 = self.hid_fc(ht1)
+#         ct1 = self.hid_fc(ct1)
+        return x
 
-
+#     def init_hidden(self):
+#         return (torch.zeros(10, 19, 300, requires_grad=True).to(device), torch.zeros(10, 19, 300, requires_grad=True).to(device))
 
 class Embedng(nn.Module):
   def __init__(self):
@@ -177,24 +132,17 @@ class Embedng(nn.Module):
 
 
 
-# sent = "Привет, как дела?".split(" ")      
-# tens = encode_in_tns1(sent)
-# tens = torch.tensor(tens)
-#print(tens)
-#print(len(all_symbs))
 
 embedding = Embedng()
-# embed_seq = embedding.to_embed_seq(tens)
-# enc_words = embedding.unembed(embed_seq)
-# print(enc_words)
-
 
 
 
 def train(net, device):
-     net = nn.DataParallel(net)
+#      hid = net.init_hidden()
+#      torch.autograd.set_detect_anomaly(True)
      scheph = 400
      losseph = 10
+     losseph1 = losseph
      sprange = len(answ)
      range_lst = []
      loss_lst = []
@@ -202,8 +150,7 @@ def train(net, device):
      for i in range(0, sprange-1):
        range_lst.append(i)
      loss_avg = []
-     epochs = 10000
-
+     epochs = 2000
      optimizer = torch.optim.SGD(net.parameters(), lr = 0.9, momentum = 0.9)
      scheduler1 = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, 
@@ -211,51 +158,38 @@ def train(net, device):
     verbose=False, 
     factor=0.5
 )
+     net.train()
      for epoch in range(epochs):
       random.shuffle(range_lst)
       loss_in_data = []
       print(epoch)
-      
+#       net.train()
       for i in range_lst:
          inputs, targets = quest[i].split(" "), answ[i].split(" ")
-         net.train()
-         
          optimizer.zero_grad()
          inputs = encode_in_tns1(inputs)
          inputs = embedding.to_embed_seq(inputs)
-#         inputs = torch.tensor(inputs, dtype = torch.float32)
-#         inputs = embedding.unembed(inputs)
          targets = encode_in_tns1(targets)
          targets = embedding.to_embed_seq(targets)
          inputs, targets = inputs.to(device), targets.to(device)
          output = net(inputs)
-         #net = nn.DataParallel(net)
          loss = crit(output, targets)
          loss.backward()
          optimizer.step()
          loss_avg.append(loss.item())
          loss_in_data.append(loss.item())
       print(embedding.unembed(output))
-      #print("Loss: ", loss.item())
       loss_lst.append(sum(loss_in_data)/len(loss_in_data))
       if epoch == losseph:
         print("Loss: ", sum(loss_in_data)/len(loss_in_data))
-        losseph += 10
-      if epoch == scheph:
-           mean_loss = np.mean(loss_avg)
-           print(f'Loss: {mean_loss}')
-           scheduler1.step(mean_loss)
-           loss_avg = []
-           net.eval()
-           scheph += 400
-      # if len(loss_avg) >= 50:
-      #      mean_loss = np.mean(loss_avg)
-      #      print(f'Loss: {mean_loss}')
-      #      scheduler1.step(mean_loss)
-      #      loss_avg = []
-      #      net.eval()
-      #      output = output.to(device)
-      #      print(embedding.unembed(output))
+        losseph += losseph1
+#       if epoch == scheph:
+#            mean_loss = np.mean(loss_avg)
+#            print(f'Loss: {mean_loss}')
+#            scheduler1.step(mean_loss)
+#            loss_avg = []
+#            net.eval()
+#            scheph += 400
      plt.plot(loss_lst)
      plt.show()
      print(embedding.unembed(output))
@@ -266,22 +200,19 @@ net = RecurrentNet(19)
 if torch.cuda.is_available() == True:
   net.cuda()
 
-# try:
-#     if os.path.exists('/kaggle/input/weights/model_weights.pth'):
-#         net.load_state_dict(torch.load('/kaggle/input/weights/model_weights.pth'))
-#         net.eval()
-#     else:
-#         print('not exs')
-#         pass    
-# except RuntimeError:
-#     print('Err')
-#     pass
+
+# net.load_state_dict(torch.load('model_weights.pth'))
+# net.eval()
+
 # inp = input("Вы: ").split(" ")
 # inp = encode_in_tns1(inp)
 # inp = embedding.to_embed_seq(inp)
 # output = net.forward(inp)
 # print(embedding.unembed(output))
 
+
+# net.load_state_dict(torch.load('model_weights.pth')) 
+# net.eval()
 
 try:
   train(net, device)
