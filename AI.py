@@ -29,7 +29,7 @@ import random, math
 
 device ='cuda' if torch.cuda.is_available() == True else 'cpu'
 #device = xm.xla_device()
-#c_dev = 'cpu'
+c_dev = 'cpu'
 
 torch.manual_seed(123)
 weights = torch.randn(156, 20).to(device)
@@ -49,7 +49,10 @@ def encode_in_tns1(inp_list):
   sec_l_len = 20
   final_list = []
   sec_list = []
-  for item in inp_list:
+  if len(inp_list) == 0:
+    pass
+  else:
+   for item in inp_list:
     wordchr_list = []
     
     for charc in item:
@@ -118,10 +121,11 @@ class RecurrentNet(nn.Module):
 #         self.fc.flatten_parameters()
 #         self.fc = nn.DataParallel(self.fc)
 #        nn.Softmax
-        self.fc2 = nn.Linear(200, input_size)
-        self.hid_fc = nn.Linear(600, 200)
+        self.fc2 = nn.Linear(200, input_size, bias = True)
+        self.hid_t = nn.Linear(60, 200, bias = True)
+        self.c_t = nn.Linear(60, 200, bias = True)
         #nn.Softmax
-        self.fc3 = nn.Linear(400, 200)
+        self.fc3 = nn.Linear(400, 200, bias = True)
         #nn.Softmax
         #self.hid_fc = nn.Linear(300, 300)
         #self.fc1 = nn.DataParallel(self.fc) 
@@ -131,18 +135,18 @@ class RecurrentNet(nn.Module):
         x, (h1, c1) = self.fc(x)
         #x = self.softmax(x)
         ht1, ct1 = hid
-        h1 = self.hid_fc(torch.bmm(h1, ht1))
+        h1 = self.hid_t(ht1)
         #h1 = self.softmax(h1)
-        c1 = self.hid_fc(torch.bmm(c1, ct1))
+        c1 = self.c_t(ct1)
         #c1 = self.softmax(c1)
         x = self.fc3(x)
         #x = self.softmax(x)
-        x, (h1, c1) = self.fc1(x, (h1, c1))
+        x, (ht2, ct2) = self.fc1(x, (h1, c1))
         #x = self.softmax(x)
         x = self.fc2(x)
 #         ht1 = self.hid_fc(ht1)
 #         ct1 = self.hid_fc(ct1)
-        return x, (h1, c1)
+        return x, (ht2, ct2)
 
 #     def init_hidden(self):
 #         return (torch.zeros(10, 19, 300, requires_grad=True).to(device), torch.zeros(10, 19, 300, requires_grad=True).to(device))
@@ -184,25 +188,30 @@ class Embedng(nn.Module):
         return words
 
 
+
 def spec_hid(inp_tns = None, cont_tens = None):
+  #lin = nn.Linear()
   if inp_tns == None:
     inp_tns = torch.randn(90, 20, 20)
   #print(inp_tns.size())
   if cont_tens == None or 0:
-    h1s, c1s = torch.bmm(torch.reshape(inp_tns, (8, 225, 20)), torch.randn(8, 20, 400)), torch.bmm(torch.reshape(inp_tns, (8, 225, 20)), torch.randn(8, 20, 400))
+    h1s, c1s = torch.bmm(torch.randn(3, 20, 200), torch.reshape(inp_tns, (3, 200, 60))), torch.bmm(torch.randn(3, 20, 200), torch.reshape(inp_tns, (3, 200, 60)))
+    
   else:
     old_h, old_c = cont_tens
-    h1s, c1s = torch.bmm(torch.reshape(inp_tns, (8, 225, 20)), old_h), torch.bmm(torch.reshape(inp_tns, (8, 225, 20)), old_c)
-  return (h1s.view(3, 400, 600), c1s.view(3, 400, 600))
+    old_h = old_h.view(3, 20, 200)
+    old_c = old_c.view(3, 20, 200)
+    h1s, c1s = torch.bmm(old_h, torch.reshape(inp_tns, (3, 200, 60))), torch.bmm(old_c, torch.reshape(inp_tns, (3, 200, 60)))
+  return (h1s, c1s)
+
 
 embedding = Embedng()
 
+
 def train(net, device):
+     torch.autograd.set_detect_anomaly(True)
      net.train()
-     cont = 0
-#     hid = (torch.zeros(8, 20, 400).to(device), torch.zeros(8, 20, 400).to(device))
-#      hid = net.init_hidden()
-#      torch.autograd.set_detect_anomaly(True)
+     cont = None
      scheph = 50
      scheph1 = scheph
      losseph = 10
@@ -229,18 +238,21 @@ def train(net, device):
 #       net.train()
       for i in range_lst:
          inputs, targets = quest[i].split(" "), answ[i].split(" ")
-         optimizer.zero_grad()
          inputs = encode_in_tns1(inputs)
          inputs = embedding.to_embed_seq(inputs)
          targets = encode_in_tns1(targets)
          targets = embedding.to_embed_seq(targets)
          inputs, targets = inputs.to(device), targets.to(device)
          hid = spec_hid(inp_tns = inputs, cont_tens = cont)
-         output, hidn = net(inputs, hid)
-         cont = hidn
+         output, (hf1, cf1) = net(inputs, hid)
+         #cont = hidn
          loss = crit(output, targets)
          loss.backward()
          optimizer.step()
+         optimizer.zero_grad()
+         hf1 = hf1.detach()
+         cf1 = cf1.detach()
+         cont = (hf1, cf1)
          #xm.optimizer_step(optimizer)
          #xm.mark_step()
          loss_avg.append(loss.item())
@@ -267,15 +279,15 @@ net = RecurrentNet(20)
 if torch.cuda.is_available() == True:
   net.cuda()
 net = net.to(device)
-#hid = (torch.zeros(8, 20, 400).to(device), torch.zeros(8, 20, 400).to(device))    
-#net.load_state_dict(torch.load('model_weights.pth', map_location=torch.device(device)))
-#net.eval()
 
-#if os.path.exists("/content/model_weights.pth"):
-#  print("Loading weights...")
-#  net.load_state_dict(torch.load('model_weights.pth')) 
-#  net.eval()
-
+try:
+ if os.path.exists("/content/model_weights.pth"):
+  print("Loading weights...")
+  net.load_state_dict(torch.load('model_weights.pth', map_location=torch.device(device))) 
+  net.eval()
+except RuntimeError:
+  print("Wrong weigts")
+  pass
 
 #inp = input("Вы: ").split(" ")
 #inp = encode_in_tns1(inp)
@@ -289,6 +301,7 @@ net = net.to(device)
 #print(strng)
 
 #train(net, device)
+
 
 try:
   train(net, device)
