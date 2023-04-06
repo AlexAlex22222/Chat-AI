@@ -29,7 +29,7 @@ import random, math
 
 device ='cuda' if torch.cuda.is_available() == True else 'cpu'
 #device = xm.xla_device()
-c_dev = 'cpu'
+#c_dev = 'cpu'
 
 torch.manual_seed(123)
 weights = torch.randn(156, 20).to(device)
@@ -184,15 +184,6 @@ class Embedng(nn.Module):
         return words
 
 
-#
-#
-#
-#
-#
-#
-#
-
-
 def spec_hid(inp_tns = None, cont_tens = None):
   if inp_tns == None:
     inp_tns = torch.randn(90, 20, 20)
@@ -204,10 +195,7 @@ def spec_hid(inp_tns = None, cont_tens = None):
     h1s, c1s = torch.bmm(torch.reshape(inp_tns, (8, 225, 20)), old_h), torch.bmm(torch.reshape(inp_tns, (8, 225, 20)), old_c)
   return (h1s.view(3, 400, 600), c1s.view(3, 400, 600))
 
-
 embedding = Embedng()
-
-
 
 def train(net, device):
      net.train()
@@ -276,13 +264,17 @@ def train(net, device):
       
 
 net = RecurrentNet(20)
-#if torch.cuda.is_available() == True:
-#  net.cuda()
+if torch.cuda.is_available() == True:
+  net.cuda()
 net = net.to(device)
 #hid = (torch.zeros(8, 20, 400).to(device), torch.zeros(8, 20, 400).to(device))    
 #net.load_state_dict(torch.load('model_weights.pth', map_location=torch.device(device)))
-net.eval()
+#net.eval()
 
+#if os.path.exists("/content/model_weights.pth"):
+#  print("Loading weights...")
+#  net.load_state_dict(torch.load('model_weights.pth')) 
+#  net.eval()
 
 
 #inp = input("Вы: ").split(" ")
@@ -297,14 +289,10 @@ net.eval()
 #print(strng)
 
 #train(net, device)
-#if os.path.exists("/content/model_weights.pth"):
-#  print("Loading weights...")
-#  net.load_state_dict(torch.load('model_weights.pth')) 
-#  net.eval()
 
-#try:
-#  train(net, device)
-#  torch.save(net.state_dict(), 'model_weights.pth')
-#except KeyboardInterrupt:
-#  torch.save(net.state_dict(), 'model_weights.pth')
-#  KeyboardInterrupt()
+try:
+  train(net, device)
+  torch.save(net.state_dict(), 'model_weights.pth')
+except KeyboardInterrupt:
+  torch.save(net.state_dict(), 'model_weights.pth')
+  KeyboardInterrupt()
